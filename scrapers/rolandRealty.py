@@ -1,9 +1,9 @@
 from bs4 import BeautifulSoup
-import requests
-import re, urlparse
-
+import re, psycopg2, os
 from selenium import webdriver
-from time import sleep
+
+db_con = psycopg2.connect(database='aptFinderDB', user=os.environ['DB_USER'], password=os.environ['DB_PASS'])
+cursor = db_con.cursor()
 
 domain = "http://www.roland-realty.com"
 urls = [
@@ -19,7 +19,6 @@ urls = [
 for url in urls:
     data = []
     driver = webdriver.PhantomJS()
-    driver.set_window_size(1120, 550)
     driver.get(url)
 
     soup = BeautifulSoup(driver.page_source, "lxml")
@@ -31,7 +30,6 @@ for url in urls:
 
         # start an apartment-specific PhantomJS instance to grab details about individual apartments
         aptDriver = webdriver.PhantomJS()
-        aptDriver.set_window_size(1120, 550)
         aptDriver.get(aptUrl)
         aptSoup = BeautifulSoup(aptDriver.page_source, "lxml")
         aptName = aptSoup.find(class_="wsite-content-title").string
@@ -46,5 +44,13 @@ for url in urls:
 
         data.append({'name': aptName, 'url': aptUrl, 'longitude': longitude, 'latitude': latitude})
 
-    print(data)
     driver.quit()
+
+    for aptData in data:
+        print(aptData)
+        cursor.execute("""
+            INSERT INTO public.apartments (company, name, url, longitude, latitude) VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (company, name) DO UPDATE SET (url, longitude, latitude) = (%s, %s, %s)
+            """, ("Roland Realty", aptData['name'], aptData['url'], aptData['longitude'], aptData['latitude'], aptData['url'], aptData['longitude'], aptData['latitude']))
+        db_con.commit()
+    db_con.close()

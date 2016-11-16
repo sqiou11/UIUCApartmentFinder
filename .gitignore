@@ -1,3 +1,6 @@
+# Images
+/static/images
+
 # Log files
 *.log
 
@@ -5,7 +8,7 @@
 *.pyc
 
 # all test files
-/*/test
+*tests.py
 
 # Windows image file caches
 Thumbs.db

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html ng-app="app">
+    <head>
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+        <!-- Optional theme -->
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+    </head>
+    <body>
+        <div class="container-fluid" ng-controller="MapController">
+            <h1>Apartment Finder</h1>
+            <div class="container">
+                <form class="form-horizontal">
+                    <div class="form-group">
+                        <label for="room_type" class="col-sm-2 control-label">Room Types</label>
+                        <div class="col-sm-10">
+                            <select name="room_type" class="form-control" ng-model="query.room_type">
+                                <option value="Studio">Studio</option>
+                                <option value="1 BR">1 BR</option>
+                                <option value="2 BR">2 BR</option>
+                                <option value="3 BR">3 BR</option>
+                                <option value="4 BR">4 BR</option>
+                                <option value="5 BR">5 BR</option>
+                                <option value="House">House</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="dist_from_stops" class="col-sm-2 control-label">Distance from Bus Stops</label>
+                        <div class="col-sm-8">
+                            <input class="form-control" ng-model="query.dist_from_stops">
+                        </div>
+                        <div class="col-sm-2">
+                            <label class="radio-inline"><input type="radio" ng-model="query.dist_units" value="feet"> feet</label>
+                            <label class="radio-inline"><input type="radio" ng-model="query.dist_units" value="minutes"> minutes</label>
+                        </div>
+                    </div>
+                </form>
+                <div class="col-sm-offset-2 col-sm-10">
+                    <button class="btn btn-primary" ng-click="search()">Search</button>
+                </div>
+            </div>
+            <p>Search query: [[ query ]]</p>
+            <div id="map" style="width:100%; height:800px"></div>
+        </div>
+        <script>
+            var map;
+            function initMap() {
+                map = new google.maps.Map(document.getElementById('map'), {
+                    zoom: 16,
+                    center: {lat: 40.106170, lng: -88.237867}
+                });
+            }
+        </script>
+        <!-- Jquery -->
+        <script src="https://code.jquery.com/jquery-3.1.1.min.js" integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8=" crossorigin="anonymous"></script>
+        <!-- Google Maps JavaScript -->
+        <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAs4i4EhejeZRHb2xV_EDmVoC-ByBa9T-4&callback=initMap"></script>
+        <!-- Bootstrap JavaScript -->
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+        <!-- AngularJS JavaScript -->
+        <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.7/angular.min.js"></script>
+
+        <!-- AngularJS code -->
+        <script src="{{ url_for('static', filename='app.js') }}"></script>
+        <script src="{{ url_for('static', filename='mapController.js') }}"></script>
+    </body>
+</html>

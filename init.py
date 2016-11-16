@@ -1,21 +1,46 @@
-import requests
+from flask import Flask, request, render_template
+from api_helpers import getRoutesNearLatLong
+import psycopg2, os, json
 
-cumtdAPIBase = "https://developer.cumtd.com/api/v2.2/json/"
-cumtdAPIKey = "f6a8e3b691074f89b7b74a3a81379207"
+db_con = psycopg2.connect(database='aptFinderDB', user=os.environ['DB_USER'], password=os.environ['DB_PASS'])
+cursor = db_con.cursor()
+app = Flask(__name__)
 
-def getRoutesNearLongLat(lon, lat, dist):
-    method = "GetStopsByLatLon"
-    nearestStops = requests.get(cumtdAPIBase + method, params={"key": cumtdAPIKey, "lat": lat, "lon": lon}).json()["stops"]
-    nearestRoutes = set()
+@app.route('/')
+def index():
 
-    method = "GetRoutesByStop"
-    for stop in nearestStops:
-        if stop["distance"] <= dist:
-            routesAtThisStop = requests.get(cumtdAPIBase + method, params={"key": cumtdAPIKey, "stop_id": stop["stop_id"]}).json()["routes"]
-            for route in routesAtThisStop:
-                if route["route_long_name"] not in nearestRoutes:
-                    nearestRoutes.add(route["route_long_name"])
+    return render_template('index.html')
 
-    return nearestRoutes
+@app.route('/api/apartments')
+def apartments():
+    room_type = request.args.get('room_type')
+    cursor.execute("""SELECT * FROM public.apartments, public.room_types WHERE public.apartments.name = public.room_types.apartment AND room = %s""", (request.args.get('room_type'),))
+    allApartments = queryResultsToDict(cursor)
 
-print(getRoutesNearLongLat(-88.2390549, 40.107053, 1200))
+    if request.args.get('dist_from_stops'):
+        apartmentsWithBusStops = { 'apartments': [], 'stops': [] }
+        stopsSeenSoFar = set()
+        for apartment in allApartments:
+            stopsWithPreferredRoutes = getRoutesNearLatLong(apartment['latitude'], apartment['longitude'], int(request.args.get('dist_from_stops')))
+            print(stopsWithPreferredRoutes)
+            if not stopsWithPreferredRoutes == []:
+                apartmentsWithBusStops['apartments'].append(apartment)
+                for stop in stopsWithPreferredRoutes:
+                    if stop['stop_id'] not in stopsSeenSoFar:
+                        apartmentsWithBusStops['stops'].append(stop)
+                        stopsSeenSoFar.add(stop['stop_id'])
+        return json.dumps(apartmentsWithBusStops)
+    else:
+        return json.dumps({ 'apartments': allApartments })
+
+"""
+Helper function to convert the list of tuples returned by PostgreSQL query to dict
+Expects a call to cursor.execute() to have previously been made.
+"""
+def queryResultsToDict(cursor):
+    return [dict((cursor.description[i][0], value) for i, value in enumerate(row)) for row in cursor.fetchall()]
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+# print(getRoutesNearLatLong(40.107053, -88.2390549, 500))

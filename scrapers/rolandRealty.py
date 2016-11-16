@@ -39,9 +39,13 @@ def getAptData(aptTuple):
     aptDriver.quit()
     aptData = {'name': aptName, 'url': url, 'longitude': longitude, 'latitude': latitude, 'type': aptType}
     cursor.execute("""
-        INSERT INTO public.apartments (company, name, url, longitude, latitude, type) VALUES (%s, %s, %s, %s, %s, %s)
-        ON CONFLICT (company, name, type) DO NOTHING
-        """, ("Roland Realty", aptData['name'], aptData['url'], aptData['longitude'], aptData['latitude'], aptData['type']))
+        INSERT INTO public.apartments (company, name, url, longitude, latitude) VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (company, name) DO NOTHING
+        """, ("Roland Realty", aptData['name'], aptData['url'], aptData['longitude'], aptData['latitude']))
+    cursor.execute("""
+        INSERT INTO public.room_types (apartment, room) VALUES (%s, %s)
+        ON CONFLICT (apartment, room) DO NOTHING
+        """, (aptData['name'], aptData['type']))
     db_con.commit()
     print("Exiting process for " + url)
 
@@ -64,7 +68,7 @@ def scrape():
         print("Finished collecting urls from " + source['url'])
     driver.quit()
 
-    executeParallel(getAptData, aptUrls, 16)
+    executeParallel(getAptData, aptUrls, 4)
     print(time.clock() - start)
 
     db_con.close()

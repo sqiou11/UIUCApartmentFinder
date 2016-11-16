@@ -29,9 +29,13 @@ def getAptData(url):
     for roomType in roomTypes:
         aptData = {'name': aptName, 'url': url, 'longitude': longitude, 'latitude': latitude, 'type': roomType}
         cursor.execute("""
-            INSERT INTO public.apartments (company, name, url, longitude, latitude, type) VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (company, name, type) DO NOTHING
-            """, ("CPM", aptData['name'], aptData['url'], aptData['longitude'], aptData['latitude'], aptData['type']))
+            INSERT INTO public.apartments (company, name, url, longitude, latitude) VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (company, name) DO NOTHING
+            """, ("CPM", aptData['name'], aptData['url'], aptData['longitude'], aptData['latitude']))
+        cursor.execute("""
+            INSERT INTO public.room_types (apartment, room) VALUES (%s, %s)
+            ON CONFLICT (apartment, room) DO NOTHING
+            """, (aptData['name'], aptData['type']))
         db_con.commit()
     print("Exiting thread for " + url)
 

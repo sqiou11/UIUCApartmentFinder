@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from utils import executeParallel
-import re, psycopg2, os, time
+import re, psycopg2, os, time, requests
 
 db_con = psycopg2.connect(database='aptFinderDB', user=os.environ['DB_USER'], password=os.environ['DB_PASS'])
 cursor = db_con.cursor()
@@ -16,6 +16,8 @@ sources = [
     { "type": "5 BR", "url": "http://www.roland-realty.com/5-bedroom-apartments.html" }
 ]
 
+cumtdAPIBase = "https://developer.cumtd.com/api/v2.2/json/"
+cumtdAPIKey = os.environ['CUMTD_API_KEY']
 
 def getAptData(aptTuple):
     aptType = aptTuple[0]
@@ -27,8 +29,8 @@ def getAptData(aptTuple):
     aptSoup = BeautifulSoup(aptDriver.page_source, "lxml")
 
     aptName = aptSoup.find(class_="wsite-content-title")
-    if aptName is not None:
-        aptName = aptName.string.replace(u'\xa0', ' ')
+    aptName = ''.join(aptName.find_all(text=True))
+    aptName = aptName.replace(u'\xa0', ' ')
     aptMapSource = aptSoup.find(class_="wsite-map").find('iframe')['src']
 
     # grab longitude and latitude coordinates for this apartment
@@ -39,14 +41,23 @@ def getAptData(aptTuple):
     aptDriver.quit()
     aptData = {'name': aptName, 'url': url, 'longitude': longitude, 'latitude': latitude, 'type': aptType}
     cursor.execute("""
-        INSERT INTO public.apartments (company, name, url, longitude, latitude) VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO uiuc.apartments (company, name, url, longitude, latitude) VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (company, name) DO NOTHING
         """, ("Roland Realty", aptData['name'], aptData['url'], aptData['longitude'], aptData['latitude']))
+    db_con.commit()
     cursor.execute("""
-        INSERT INTO public.room_types (apartment, room) VALUES (%s, %s)
+        INSERT INTO uiuc.room_types (apartment, room) VALUES (%s, %s)
         ON CONFLICT (apartment, room) DO NOTHING
         """, (aptData['name'], aptData['type']))
     db_con.commit()
+
+    distFromAllStops = requests.get(cumtdAPIBase + "GetStopsByLatLon", params={"key": cumtdAPIKey, "lat": aptData['latitude'], "lon": aptData['longitude'], "count": 30000}).json()["stops"]
+    for stop in distFromAllStops:
+        cursor.execute("""
+            INSERT INTO uiuc.apartment_stop_distances (apartment, stop_id, distance) VALUES (%s, %s, %s)
+            ON CONFLICT (apartment, stop_id) DO NOTHING
+            """, (aptData['name'], stop['stop_id'], stop['distance']))
+        db_con.commit()
     print("Exiting process for " + url)
 
 def scrape():

@@ -2,10 +2,13 @@ from bs4 import BeautifulSoup
 from utils import executeParallel
 import re, psycopg2, os, time, urllib2, requests
 
-geocodingAPIKey = "AIzaSyAs4i4EhejeZRHb2xV_EDmVoC-ByBa9T-4"
+geocodingAPIKey = os.environ['GMAP_GEOCODING_API_KEY']
 geocodingAPIRequestBase = "https://maps.googleapis.com/maps/api/geocode/json"
 db_con = psycopg2.connect(database='aptFinderDB', user=os.environ['DB_USER'], password=os.environ['DB_PASS'])
 cursor = db_con.cursor()
+
+cumtdAPIBase = "https://developer.cumtd.com/api/v2.2/json/"
+cumtdAPIKey = os.environ['CUMTD_API_KEY']
 
 def getAptData(url):
     print("Starting process for " + url)
@@ -26,17 +29,28 @@ def getAptData(url):
     longitude = longLat['lng']
     latitude = longLat['lat']
 
+    aptData = {'name': aptName, 'url': url, 'longitude': longitude, 'latitude': latitude}
+    cursor.execute("""
+        INSERT INTO uiuc.apartments (company, name, url, longitude, latitude) VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (company, name) DO NOTHING
+        """, ("CPM", aptData['name'], aptData['url'], aptData['longitude'], aptData['latitude']))
+    db_con.commit()
+
     for roomType in roomTypes:
-        aptData = {'name': aptName, 'url': url, 'longitude': longitude, 'latitude': latitude, 'type': roomType}
         cursor.execute("""
-            INSERT INTO public.apartments (company, name, url, longitude, latitude) VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (company, name) DO NOTHING
-            """, ("CPM", aptData['name'], aptData['url'], aptData['longitude'], aptData['latitude']))
-        cursor.execute("""
-            INSERT INTO public.room_types (apartment, room) VALUES (%s, %s)
+            INSERT INTO uiuc.room_types (apartment, room) VALUES (%s, %s)
             ON CONFLICT (apartment, room) DO NOTHING
-            """, (aptData['name'], aptData['type']))
+            """, (aptData['name'], roomType))
         db_con.commit()
+
+    distFromAllStops = requests.get(cumtdAPIBase + "GetStopsByLatLon", params={"key": cumtdAPIKey, "lat": aptData['latitude'], "lon": aptData['longitude'], "count": 30000}).json()["stops"]
+    for stop in distFromAllStops:
+        cursor.execute("""
+            INSERT INTO uiuc.apartment_stop_distances (apartment, stop_id, distance) VALUES (%s, %s, %s)
+            ON CONFLICT (apartment, stop_id) DO NOTHING
+            """, (aptData['name'], stop['stop_id'], stop['distance']))
+        db_con.commit()
+
     print("Exiting thread for " + url)
 
 def scrape():
@@ -47,9 +61,6 @@ def scrape():
     aptUrls = []
 
     page_source = urllib2.urlopen(url).read()
-    with open("out", "w+") as f:
-        f.write(page_source)
-        f.close()
     soup = BeautifulSoup(page_source, "lxml")
     apartments = soup.find_all(id=re.compile(r"idx\-\d+"))
     for apt in apartments:
@@ -57,7 +68,6 @@ def scrape():
         aptUrls.append(aptUrl)
 
     print("Finished collecting urls from " + url)
-    #print(aptUrls)
     executeParallel(getAptData, aptUrls, 4)
 
     db_con.close()

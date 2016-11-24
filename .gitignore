@@ -1,5 +1,6 @@
 # Images
 /static/images
+/cumtd_google_transit
 
 # Log files
 *.log

@@ -1,5 +1,5 @@
 app.controller('MapController', ['$scope', '$http', function($scope, $http) {
-    $scope.query = {};
+    $scope.query = { bus_preferences: [] };
     $scope.room_type_form = "";
     $scope.apartments = [];
     $scope.apartment_markers = [];
@@ -17,6 +17,16 @@ app.controller('MapController', ['$scope', '$http', function($scope, $http) {
 
     $scope.updateFeet = function() {
         $scope.query.dist_feet = Math.round((parseInt($scope.minutes) + parseInt($scope.seconds)/60)*(3/60)*5280);
+    }
+
+    $scope.updateBusPreferences = function(line) {
+        var index = $scope.query.bus_preferences.indexOf(line);
+        // if line doesn't already exist, add it, otherwise remove it
+        if(index > -1) {
+            $scope.query.bus_preferences.splice(index, 1);
+        } else {
+            $scope.query.bus_preferences.push(line);
+        }
     }
 
     $scope.search = function() {

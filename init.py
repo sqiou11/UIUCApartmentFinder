@@ -1,5 +1,4 @@
 from flask import Flask, request, render_template
-from api_helpers import getRoutesNearLatLong
 import psycopg2, os, json
 
 db_con = psycopg2.connect(database='aptFinderDB', user=os.environ['DB_USER'], password=os.environ['DB_PASS'])
@@ -27,26 +26,43 @@ def index():
 def apartments():
     if request.args.get('dist_feet') and request.args.get('dist_feet') != "" and int(request.args.get('dist_feet')) > 0:
         query = """
-                DROP TABLE IF EXISTS valid_apartments;
-                SELECT * INTO TEMP valid_apartments FROM uiuc.apartments
-                WHERE apartments.name IN (SELECT apartment FROM uiuc.room_types WHERE room = %s)
-                AND apartments.name IN (SELECT apartment FROM uiuc.apartment_stop_distances WHERE distance <= %s);
+                DROP TABLE IF EXISTS valid_stops;
+                WITH apartments_within_dist_of_stops (apartment, stop, distance)
+                AS (
+                    SELECT * FROM uiuc.apartment_stop_distances
+                    WHERE apartment IN (SELECT apartment FROM uiuc.room_types WHERE room = %s)
+                    AND distance <= %s
+                )
+                SELECT * INTO TEMP valid_stops FROM uiuc.stop_points
+                WHERE parent_stop_id IN (
+                    SELECT stop_id FROM apartments_within_dist_of_stops INNER JOIN uiuc.stop_routes ON (stop = stop_id)
                 """
+        prefArray = []
+        bus_preferences = request.args.get('bus_preferences').split(',')
+        if not bus_preferences == ['']:
+            for bus_pref in bus_preferences:
+                prefArray.append("(route_id LIKE '%%" + bus_pref.upper() + "%%')")
+            query += " WHERE " + " OR ".join(prefArray) + ")"
+        else:
+            query += ")"
         args = (request.args.get('room_type'), request.args.get('dist_feet'))
         cursor.execute(query, args)
 
         query = """
-                SELECT * FROM uiuc.stop_points
-                WHERE parent_stop_id IN (SELECT stop_id FROM uiuc.apartment_stop_distances
-                WHERE apartment IN (SELECT name FROM valid_apartments)
-                AND distance <= %s)
+                SELECT * FROM uiuc.apartments
+                WHERE name IN (
+                    SELECT apartment FROM uiuc.apartment_stop_distances
+                    WHERE stop_id IN (SELECT parent_stop_id FROM valid_stops)
+                    AND distance <= %s
+                )
                 """
-        allStops = executeQueryReturnDict(cursor, query, (request.args.get('dist_feet'),))
+        allApartments = executeQueryReturnDict(cursor, query, (request.args.get('dist_feet'),))
 
         query = """
-                SELECT * FROM valid_apartments
+                SELECT * FROM valid_stops
                 """
-        allApartments = executeQueryReturnDict(cursor, query)
+        allStops = executeQueryReturnDict(cursor, query)
+
         db_con.commit()
         return json.dumps({'apartments': allApartments, 'stops': allStops})
     else:

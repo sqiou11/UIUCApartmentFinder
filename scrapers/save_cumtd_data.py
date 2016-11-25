@@ -1,4 +1,4 @@
-import psycopg2, os, requests
+import psycopg2, os, requests, time
 
 cumtdAPIBase = "https://developer.cumtd.com/api/v2.2/json/"
 cumtdAPIKey = os.environ['CUMTD_API_KEY']
@@ -29,16 +29,31 @@ def createRouteAndShapeTables():
 def getAllBusStopData():
     all_stops = requests.get(cumtdAPIBase + "GetStops", params={"key": cumtdAPIKey}).json()['stops']
     for stop in all_stops:
+        print("Processing " + stop['stop_name'])
         cursor.execute("""
             INSERT INTO uiuc.stops (stop_id, stop_name, code) VALUES (%s, %s, %s)
             ON CONFLICT (stop_id) DO NOTHING
             """, (stop['stop_id'], stop['stop_name'], stop['code']))
+        db_con.commit()
         for stop_point in stop['stop_points']:
             cursor.execute("""
                 INSERT INTO uiuc.stop_points (stop_id, stop_name, code, stop_lat, stop_lon, parent_stop_id) VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (stop_id) DO NOTHING
                 """, (stop_point['stop_id'], stop_point['stop_name'], stop_point['code'], stop_point['stop_lat'], stop_point['stop_lon'], stop['stop_id']))
-    db_con.commit()
+            db_con.commit()
+
+        routesAtThisStop = requests.get(cumtdAPIBase + "GetRoutesByStop", params={"key": cumtdAPIKey, "stop_id": stop['stop_id']}).json()
+        while routesAtThisStop['status']['code'] == 403:
+            print("Reached API usage limit, retrying in 1 minute...")
+            time.sleep(60)
+            routesAtThisStop = requests.get(cumtdAPIBase + "GetRoutesByStop", params={"key": cumtdAPIKey, "stop_id": stop['stop_id']}).json()
+
+        for route in routesAtThisStop['routes']:
+            cursor.execute("""
+                INSERT INTO uiuc.stop_routes (stop_id, route_id) VALUES (%s, %s)
+                ON CONFLICT (stop_id, route_id) DO NOTHING
+                """, (stop['stop_id'], route['route_id']))
+            db_con.commit()
 
 #createRouteAndShapeTables()
 getAllBusStopData()
